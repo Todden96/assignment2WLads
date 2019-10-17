@@ -29,6 +29,7 @@ public class UnitCommitmentProblem {
     private final double[] rampDown;
     private final double[] demand;
 
+    //Here we create a template for our UnitCommitmentProblem.
     public UnitCommitmentProblem(int nHours, int nGenerators, String[] generatorName, 
             double[] commitmentCost, double[] productionCost, double[] sheddingCost, 
             double[] startUpCost, int[] minOnTime, int[] minOffTime, int[][] minOnTimeAtT, int[][] minOffTimeAtT, double[] minProduction, double[] maxProduction, double[] rampUp, double[] rampDown, double[] demand) {
@@ -57,21 +58,16 @@ public class UnitCommitmentProblem {
     public int getnGenerators() {
         return nGenerators;
     }
-    /**
-     * Returns the commitment cost for generator number g.
-     * Note that we need to pass the generator number in 1...nGenerators,
-     * (This is an arbitrary choice), and it retrieves the cost as
-     * commitmentCost[i-1]. The same convention applies to the remaining methods.
-     * @param g
-     * @return 
-     */
+    
+    //This gives us the commitment cost for generator g
     public double getCommitmentCost(int g) {
         if(g < 1 || g > nGenerators){
             throw new IllegalArgumentException("The generator number must be in [1,"+nGenerators+"].");
         }
         return commitmentCost[g-1];
     }
-
+    
+    //This gives us the marginal production cost for producing MW with generator g
     public double getProductionCost(int g) {
         if(g < 1 || g > nGenerators){
             throw new IllegalArgumentException("The generator number must be in [1,"+nGenerators+"].");
@@ -79,19 +75,14 @@ public class UnitCommitmentProblem {
         return productionCost[g-1];
     }
     
-    /**
-     * Returns the shedding cost for a given hour.
-     * @param h
-     * @return 
-     */
+    //This returns the shedding cost at a given time h
     public double getSheddingCost(int h) {
-        System.out.println("h = "+h+ " "+nHours);
         if(h < 1 || h > nHours){
             throw new IllegalArgumentException("The hour number must be in [1,"+nHours+"].");
         }
         return sheddingCost[h-1];
     }
-
+    
     public String getGeneratorName(int g){
         //Gives the name of generator g on the list of generators
         if(g < 1 || g > nGenerators){
@@ -99,6 +90,7 @@ public class UnitCommitmentProblem {
         }
         return generatorName[g-1];
     }
+    
     public double getStartUpCost(int g) {
         //Gives the start up cost of generator g on the list of generatorts
         if(g < 1 || g > nGenerators){
@@ -184,9 +176,4 @@ public class UnitCommitmentProblem {
         }
         return demand[h-1];
     }
-    
-    
-    
-    
-    
 }

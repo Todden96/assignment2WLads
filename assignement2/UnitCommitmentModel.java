@@ -24,18 +24,22 @@ public class UnitCommitmentModel {
     private final IloNumVar l[];
     private final IloNumVar p[][];
     private final UnitCommitmentProblem ucp;
-
+    
+    //This model will describe everything in the UnitCommitmentProblem such a variables, 
+    //constraints, objective function. Note that limits on decision variables are 
+    //taken care of in the range in which they can live.
     public UnitCommitmentModel(UnitCommitmentProblem ucp) throws IloException {
         this.ucp = ucp;
         this.model = new IloCplex();
         
         // Creates the decision variables 
+        
         // 1. The u_gt variables
         //Decides if generator g is turned on at time t
         u = new IloIntVar[ucp.getnGenerators()][ucp.getnHours()];
         for(int g = 1; g <= ucp.getnGenerators(); g++){
             for(int t = 1; t <= ucp.getnHours(); t++){
-                u[g-1][t-1] = model.boolVar("u_"+g+"_"+t);
+                u[g-1][t-1] = model.intVar(0,1,"u_"+g+"_"+t);
             }
         }
         
@@ -58,7 +62,6 @@ public class UnitCommitmentModel {
             l[t-1] = model.numVar(0,Double.POSITIVE_INFINITY,"l_"+t);
         }
         
-        
         // 4. The p_gt variables
         // This variable tells us how much power generator g is producing at time t.
         // Note that the range of the variable holds constraint (1l) accounted for.
@@ -71,18 +74,23 @@ public class UnitCommitmentModel {
         
         
         // Creates the objective function
+        
         // 1. Creates an empty linear expression
         IloLinearNumExpr obj = model.linearNumExpr();
-        // 2. Adds the start-up costs, commitment costs and production costs
         
         for(int t = 1; t <= ucp.getnHours(); t++){
             for(int g = 1; g <= ucp.getnGenerators(); g++){
+            // 2. Adds the start-up costs, commitment costs and production costs
                 obj.addTerm(1, c[g-1][t-1]);    
                 obj.addTerm(ucp.getCommitmentCost(g), u[g-1][t-1]);
+            // Note that the getter takes variable g whereas the variable u is assigned at [g-1][t-1]
+            // This is because we already specified in the UCP class that 'getting' int g means
+            // returning position [g-1] in the CommitmentCost vector.
+            // This is the case for all getters.
                 obj.addTerm(ucp.getProductionCost(g), p[g-1][t-1]);
             }
             // 3. Adds the shedding costs
-            // This is outside the g loop as it has nothing to do with the generators.
+            // Note this is outside the g loop as it has nothing to do with the generators.
             obj.addTerm(ucp.getSheddingCost(t), l[t-1]);
         }
         
@@ -93,18 +101,19 @@ public class UnitCommitmentModel {
         // Creates the constraints
         
         // 1. Constraints (1b)
-        // We have one le constraint for each hour and generator
+        // We have one (1b) constraint for each hour and generator
         for(int t = 1; t <= ucp.getnHours(); t++){
             for(int g = 1; g <= ucp.getnGenerators(); g++){
                 IloLinearNumExpr lhs = model.linearNumExpr();
                 lhs.addTerm(1, c[g-1][t-1]);
                 // We bring the right-hand-side to the lhs, changing sign
                 lhs.addTerm(-ucp.getStartUpCost(g), u[g-1][t-1]);
-                //This will save our code from crashing
                 if(t > 1){
-                    lhs.addTerm(+ucp.getStartUpCost(g), u[g-1][t-2]); // Note that in order to get u_g,t-1 we need to access u[g-1][t-2] (notice the -2)                
+                    lhs.addTerm(+ucp.getStartUpCost(g), u[g-1][t-2]); 
+                // Note that in order to get u_g,t-1 we need to access u[g-1][t-2] (notice the -2)
+                // This will save our code from crashing
                 }
-                // Finally we add the constraint
+                // Finally we add the constraint to our model
                 model.addGe(lhs, 0);
             }
         }
@@ -140,6 +149,8 @@ public class UnitCommitmentModel {
                         lhs.addTerm(-1, u[g-1][t-2]);
                     }
                 }
+                //I'm guessing this should be -constant.
+                //Discuss with group -Victor
                 model.addGe(lhs,constant);
             }
         }
@@ -147,6 +158,7 @@ public class UnitCommitmentModel {
         // 3. Constraints (1e)
         for(int t = 1; t <= ucp.getnHours(); t++){
             IloLinearNumExpr lhs = model.linearNumExpr();
+            //Note that this is created first, so we can create a sum inside all t constraint.
             for(int g = 1; g <= ucp.getnGenerators(); g++){
                 lhs.addTerm(1, p[g-1][t-1]);
             }
@@ -206,6 +218,7 @@ public class UnitCommitmentModel {
         System.out.println("Optimal objectve "+model.getObjValue());
     }
     
+    // For every generator we can see 1's at the times they are on and zero otherwise.
     public void printSolution() throws IloException{
         System.out.println("Commitment");
         for(int g = 1; g <= ucp.getnGenerators(); g++){
@@ -215,6 +228,8 @@ public class UnitCommitmentModel {
             }
             System.out.println("");
         }
+        
+        // For every generator we can see the start up costs whenever they start up and zero otherwise
         System.out.println("Startup costs");
         for(int g = 1; g <= ucp.getnGenerators(); g++){
             System.out.print(ucp.getGeneratorName(g));
@@ -223,6 +238,8 @@ public class UnitCommitmentModel {
             }
             System.out.println("");
         }
+        
+        // For every generator g we can see how much they produce at all time t
         System.out.println("Production");
         for(int g = 1; g <= ucp.getnGenerators(); g++){
             System.out.print(ucp.getGeneratorName(g));
@@ -231,6 +248,7 @@ public class UnitCommitmentModel {
             }
             System.out.println("");
         }
+        
     }
     public void end(){
         model.end();

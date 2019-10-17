@@ -26,18 +26,13 @@ public class OptSubProblem {
     private final IloNumVar p[][];
     private final IloNumVar l[];
     private final UnitCommitmentProblem UCP;
-    private final IloRange commitmentConstraints[][];
+    private final IloRange startUpConstraints[][];
     private final IloRange demandConstraints[];
     private final IloRange lowProdConstraints[][];
     private final IloRange upProdConstraints[][];
     private final IloRange upRampConstraints[][];
     private final IloRange lowRampConstraints[][];
-    /**
-     * Creates the LP model for the optimality subproblem
-     * @param cpp
-     * @param U a solution to MP
-     * @throws IloException 
-     */
+    
     public OptSubProblem(UnitCommitmentProblem cpp, double U[][]) throws IloException {
         this.UCP = cpp;
         
@@ -45,12 +40,12 @@ public class OptSubProblem {
         // 1. Every model needs an IloCplex object
         this.model = new IloCplex();
         
-        // 2. Creates the decision variables
-        // and we have 5 cities to serve
+        // 2. Creates the decision variables and how many we need of each
         c = new IloNumVar[UCP.getnGenerators()][UCP.getnHours()];
         p = new IloNumVar[UCP.getnGenerators()][UCP.getnHours()];
         l = new IloNumVar[UCP.getnHours()];
         
+        // Here we tell java that our variables should be numeric variables and should be non-negative.
         for(int j = 1; j <= UCP.getnHours(); j++){
                 for(int i = 1; i<= UCP.getnGenerators(); i++){
                 c[i-1][j-1] = model.numVar(0, Double.POSITIVE_INFINITY);
@@ -80,8 +75,10 @@ public class OptSubProblem {
  
         
         
-        
-        this.commitmentConstraints = new IloRange[UCP.getnGenerators()][UCP.getnHours()];
+        // We now make the constraints for the optimality sub problem
+        // These are all the constraints from the original problem that are not in the master problem.
+        // This is (1b)
+        this.startUpConstraints = new IloRange[UCP.getnGenerators()][UCP.getnHours()];
         for(int t = 1; t <= UCP.getnHours(); t++){
             for(int g = 1; g <= UCP.getnGenerators(); g++){
                 IloLinearNumExpr lhs = model.linearNumExpr();
@@ -89,13 +86,15 @@ public class OptSubProblem {
                 // We bring the right-hand-side to the lhs, changing sign
                                 //This will save our code from crashing
                 if(t > 1){
-                    commitmentConstraints[g-1][t-1] = model.addGe(lhs, UCP.getStartUpCost(g)*(U[g-1][t-1]-U[g-1][t-2]));
+                    startUpConstraints[g-1][t-1] = model.addGe(lhs, UCP.getStartUpCost(g)*(U[g-1][t-1]-U[g-1][t-2]));
                 }else{
-                    commitmentConstraints[g-1][t-1] = model.addGe(lhs , UCP.getStartUpCost(g)*U[g-1][t-1]);
+                    startUpConstraints[g-1][t-1] = model.addGe(lhs , UCP.getStartUpCost(g)*U[g-1][t-1]);
                 }
                 
             }
         }
+        
+        // This is (1e)
         this.demandConstraints = new IloRange[UCP.getnHours()];
         for(int t = 1; t <= UCP.getnHours(); t++){
             IloLinearNumExpr lhs = model.linearNumExpr();
@@ -106,9 +105,7 @@ public class OptSubProblem {
             demandConstraints[t-1] = model.addEq(lhs, UCP.getDemand(t));
         }
         
-        
-        
-        // 4. Constraints (1f)
+        // This is (1f)
         this.lowProdConstraints = new IloRange[UCP.getnGenerators()][UCP.getnHours()];
         for(int t = 1; t <= UCP.getnHours(); t++){
             for(int g = 1; g <= UCP.getnGenerators(); g++){
@@ -120,7 +117,7 @@ public class OptSubProblem {
             }
         }
         
-        // 5. Constraints (1g)
+        // This is (1g)
         this.upProdConstraints = new IloRange[UCP.getnGenerators()][UCP.getnHours()];
         for(int t = 1; t <= UCP.getnHours(); t++){
             for(int g = 1; g <= UCP.getnGenerators(); g++){
@@ -130,7 +127,7 @@ public class OptSubProblem {
             }
         }
         
-        // 6. Constraints (1h)
+        // This is (1h)
         this.upRampConstraints = new IloRange[UCP.getnGenerators()][UCP.getnHours()];
         for(int t = 1; t <= UCP.getnHours(); t++){
             for(int g = 1; g <= UCP.getnGenerators(); g++){
@@ -143,6 +140,7 @@ public class OptSubProblem {
             }
         }
         
+        // This is (1i)
         this.lowRampConstraints = new IloRange[UCP.getnGenerators()][UCP.getnHours()];
         for(int t = 1; t <= UCP.getnHours(); t++){
             for(int g = 1; g <= UCP.getnGenerators(); g++){
@@ -158,11 +156,15 @@ public class OptSubProblem {
         
     }
     
+    // Here we reset the problem and solve it
     public void solve() throws IloException{
         model.setOut(null);
         model.solve();
     }
     
+    // If our solution is optimal we are done in this node. If not we need to create an optimality
+    //  from the dual variables of the optimality subproblem
+    // We create the dual constant from the constraints that do not include u_gt.
     public double generateObtCutConstant() throws IloException{
         // Generates the constant part of the cut
         double constant = 0;
@@ -175,35 +177,32 @@ public class OptSubProblem {
     return constant;    
     }
     
+    // We now create the LinearTerm from the constraints 
+    // in the subproblem(second problem? secondary problem?) that include u_gt.
     public IloLinearNumExpr getCutLinearTerm(IloIntVar u[][]) throws IloException{
         IloLinearNumExpr cutTerm = model.linearNumExpr();
-        // Generates the term in x
+        // Generates the term in u
         for(int t = 1; t <= UCP.getnHours(); t++){
             for(int g = 1; g <= UCP.getnGenerators(); g++){
-                cutTerm.addTerm(model.getDual(commitmentConstraints[g-1][t-1])*UCP.getStartUpCost(g), u[g-1][t-1]);
+                cutTerm.addTerm(model.getDual(startUpConstraints[g-1][t-1])*UCP.getStartUpCost(g), u[g-1][t-1]);
                 cutTerm.addTerm(model.getDual(lowProdConstraints[g-1][t-1])*UCP.getMinProduction(g), u[g-1][t-1]);
                 cutTerm.addTerm(model.getDual(upProdConstraints[g-1][t-1])*UCP.getMaxProduction(g), u[g-1][t-1]);
             if(g > 1){
-                cutTerm.addTerm(model.getDual(commitmentConstraints[g-1][t-1])*UCP.getStartUpCost(g), u[g-1][t-2]);
+                cutTerm.addTerm(model.getDual(startUpConstraints[g-1][t-1])*UCP.getStartUpCost(g), u[g-1][t-2]);
             }
             }
         }
         return cutTerm;
     }
     
-    /**
-     * Returns the objective value
-     * @return the objective value
-     * @throws IloException 
-     */
+    
+    // Here we get the objective function value from the obtimality subproblem to check if our solution is optimal
     public double getObjective() throws IloException{
         return model.getObjValue();
     }
-    /**
-     * Returns the solution to the problem.
-     * @return the solution y for each i-j.
-     * @throws IloException 
-     */
+    
+    // Here we store the solution. This will only be needed if we find an optimal solution and want to print it
+    // ... Or if we find a nonoptimal solution and we want to print that...
     public double[][] getCSolution() throws IloException{
         double C[][] = new double[UCP.getnGenerators()][UCP.getnHours()];
         for(int j = 1; j <= UCP.getnHours(); j++){
@@ -213,6 +212,7 @@ public class OptSubProblem {
         }
         return C;
     }
+    
     public double[][] getPSolution() throws IloException{
         double P[][] = new double[UCP.getnGenerators()][UCP.getnHours()];
         for(int j = 1; j <= UCP.getnHours(); j++){
@@ -222,6 +222,7 @@ public class OptSubProblem {
         }
         return P;
     }
+    
     public double[] getLSolution() throws IloException{
         double L[] = new double[UCP.getnHours()];
         for(int j = 1; j <= UCP.getnHours(); j++){
@@ -229,7 +230,8 @@ public class OptSubProblem {
         }
         return L;
     }
-   
+    
+    // This will release all variables from the IloCplex.
     public void end(){
         model.end();
     }
