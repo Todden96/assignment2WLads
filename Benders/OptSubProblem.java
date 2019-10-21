@@ -187,7 +187,7 @@ public class OptSubProblem {
                 cutTerm.addTerm(model.getDual(startUpConstraints[g-1][t-1])*UCP.getStartUpCost(g), u[g-1][t-1]);
                 cutTerm.addTerm(model.getDual(lowProdConstraints[g-1][t-1])*UCP.getMinProduction(g), u[g-1][t-1]);
                 cutTerm.addTerm(model.getDual(upProdConstraints[g-1][t-1])*UCP.getMaxProduction(g), u[g-1][t-1]);
-            if(g > 1){
+            if(t > 1){
                 cutTerm.addTerm(model.getDual(startUpConstraints[g-1][t-1])*UCP.getStartUpCost(g), u[g-1][t-2]);
             }
             }
@@ -196,7 +196,7 @@ public class OptSubProblem {
     }
     
     
-    // Here we get the objective function value from the obtimality subproblem to check if our solution is optimal
+    // Here we get the objective function value from the otimality subproblem to check if our solution is optimal
     public double getObjective() throws IloException{
         return model.getObjValue();
     }
@@ -232,6 +232,7 @@ public class OptSubProblem {
     }
     
     // This will release all variables from the IloCplex.
+    
     public void end(){
         model.end();
     }

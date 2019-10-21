@@ -111,7 +111,7 @@ public class FeasSubProblem {
         this.demandConstraints = new IloRange[UCP.getnHours()];
         for(int j = 1; j <= UCP.getnHours() ; j++){
             IloLinearNumExpr lhs = model.linearNumExpr();
-            for(int i = 1; i <= UCP.getnGenerators(); j++){
+            for(int i = 1; i <= UCP.getnGenerators(); i++){
             lhs.addTerm(p[i-1][j-1], 1);
             }
             lhs.addTerm(l[j-1], 1);

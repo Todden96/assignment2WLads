@@ -9,6 +9,8 @@ import ilog.concert.IloException;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.Scanner;
+import Benders.MasterProblem;
+import java.util.Locale;
 
 /**
  *
@@ -27,7 +29,7 @@ public class Assignement2 {
         // directory. If the generators.txt file is elsewhere you will need to provide
         // an absolute path such as "C://Users/Documents/MyFolder/generators.txt"
         File generatorsFile = new File("generators.txt");
-        Scanner scanner = new Scanner(generatorsFile);
+        Scanner scanner = new Scanner(generatorsFile).useLocale(Locale.US);
         
         // We skip the first two lines of the file since they are a header
         // That is, we move the cursor past the first two lines (at the beginning of the third)
@@ -53,16 +55,26 @@ public class Assignement2 {
         
         for(int i = 1; i <= nGenerators; i++){
             names[i-1] = scanner.next();
+            
             minProduction[i-1] = scanner.nextDouble();
+            
             maxProduction[i-1] = scanner.nextDouble();
+            
             startUpCosts[i-1] = scanner.nextDouble();
+            
             commitmentCosts[i-1] = scanner.nextDouble();
+            
             rampUp[i-1] = scanner.nextDouble();
+            
             // RampDown is equal to RampUp
             rampDown[i-1] = rampUp[i-1];
             minUpTime[i-1] = scanner.nextInt();
+            
             minDownTime[i-1] = scanner.nextInt();
+            
             productionCost[i-1] = scanner.nextDouble();
+            
+
         }
         
         
@@ -72,11 +84,14 @@ public class Assignement2 {
         double[] demand = new double[nHours];
         
         // *************
-        // TO BE COMPLETED:
-        // Use the class Scanner to read the demand from the loads.txt file
-        // .....
-        // .....
-        // ***************
+        File loadsFile = new File("loads.txt");
+        Scanner scanner2 = new Scanner(loadsFile);
+        
+        scanner2.nextLine();
+        for(int i = 1; i <= nHours; i++){
+            demand[i-1] = scanner2.nextDouble();
+        }
+        
         
         
         // We calculate min up time and down time for each t
@@ -91,6 +106,10 @@ public class Assignement2 {
         
         double[] sheddingCosts = new double[nHours];
         
+        for(int t = 1; t <=nHours; t++){
+            sheddingCosts[t-1] = 29.58*2;
+                    //Math.max(productionCost(),0); TBC
+        }
         // ***************
         // TO BE COMPLETED:
         // Calculate the highest production cost, and set the shedding cost
@@ -122,6 +141,12 @@ public class Assignement2 {
         
         // 5. SOLVES THE PROBLEM USING BENDERS DECOMPOSITION
         // ***************
+        MasterProblem mp = new MasterProblem(ucp);
+        mp.solve();
+        System.out.println("Best value with integer Benders = "+mp.getObjective());
+        //mp.printSolution();
+        
+        
         // TO BE COMPLETED:
         // In order to complete this code you might need to create the classes
         // MasterProblem, OptimalitySubProblem, and FeasibilitySubProblem

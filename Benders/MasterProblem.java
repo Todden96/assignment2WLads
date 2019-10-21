@@ -12,6 +12,7 @@ import ilog.concert.IloRange;
 import ilog.cplex.IloCplex;
 import assignement2.UnitCommitmentProblem;
 import ilog.concert.IloIntVar;
+import ilog.concert.IloObjective;
 
 /**
  *
@@ -48,7 +49,7 @@ public class MasterProblem {
         // Assigns to each position in the matrix an IloIntVar object which can take value 0 and 1.
         for(int g = 1; g<= UCP.getnGenerators(); g++){
             for(int t = 1; t <= UCP.getnHours(); t++){
-                u[g-1][t-1] = model.intVar(0,1 , "u"+g+t);
+                u[g-1][t-1] = model.intVar(0,1 , "u"+g+"_"+t);
             }
         }
         
@@ -158,11 +159,14 @@ public class MasterProblem {
                 //Here we store the objective value of optimality subproblem
                 double ospObjective = osp.getObjective();
                 
+                
             System.out.println("Phi "+Phi+ " OSP "+ospObjective );
-                if(Phi >= ospObjective - 1e-9){
+                if(Phi >= ospObjective - 1e-6){
                     
                     //If the above inequality holds, we have found the optimal solution to the current node.
                     System.out.println("The current node is optimal");
+                //double[][] PSol = osp.getPSolution();
+                //double[] LSol = osp.getLSolution();
                 }else{
                     
                     //If the inequality does not hold we create an optimality cut.
@@ -172,9 +176,10 @@ public class MasterProblem {
                     // the optimality suproblem 
                     double cutConstant = osp.generateObtCutConstant();
                     IloLinearNumExpr cutTerm = osp.getCutLinearTerm(u);
-                    cutTerm.addTerm(1, phi);
+                    cutTerm.addTerm(-1, phi);
                     // and generate and add a cut. 
-                    add(model.ge(cutTerm, cutConstant));
+                    add(model.ge(-cutConstant, cutTerm));
+                    
                 }
         }
     }
@@ -184,14 +189,14 @@ public class MasterProblem {
         double U[][] = new double[UCP.getnGenerators()][UCP.getnHours()];
         for(int g = 1; g<= UCP.getnGenerators() ;g++){
             for(int t = 1; t <= UCP.getnHours() ; t++){
-                U[g-1][t-1] = model.getValue(u[g-1][t-1]);
+                U[g-1][t-1] = getValue(u[g-1][t-1]);
             }
         }
         return U;
     }
                 // getPhi stores the solution of phi of our master problem
     public double getPhi() throws IloException{
-        return model.getValue(phi);
+        return getValue(phi);
         }
     
     }
@@ -215,10 +220,45 @@ public class MasterProblem {
         return cost;
     }
     
-     public void printSolution() throws IloException{
+    
+    /*public void printSolution() throws IloException{
+        System.out.println("Commitment");
         for(int g = 1; g <= UCP.getnGenerators(); g++){
-            for(int t = 1; t <= UCP.getnHours(); t++){
-            System.out.println("U_"+g+"_"+t+" = "+model.getValue((u[g-1][t-1])));    
+            System.out.print(UCP.getGeneratorName(g));
+            for(int t =1; t <= UCP.getnHours(); t++){
+                System.out.print(String.format(" %4.0f ", model.getValue(u[g-1][t-1])));
+            }
+            System.out.println("");
+        }
+        
+         For every generator we can see the start up costs whenever they start up and zero otherwise
+        System.out.println("Startup costs");
+        for(int g = 1; g <= UCP.getnGenerators(); g++){
+            System.out.print(UCP.getGeneratorName(g));
+            for(int t =1; t <= UCP.getnHours(); t++){
+                System.out.print(String.format(" %4.2f ", model.getValue(c[g-1][t-1])));
+            }
+            System.out.println("");
+        }
+        
+        // For every generator g we can see how much they produce at all time t
+        System.out.println("Production");
+        for(int g = 1; g <= UCP.getnGenerators(); g++){
+            System.out.print(UCP.getGeneratorName(g));
+            for(int t =1; t <= UCP.getnHours(); t++){
+                System.out.print(String.format(" %4.2f ", model.getValue(p[g-1][t-1])));
+            }
+            System.out.println("");
+        }
+        
+    }
+    */
+    
+    public void printSolution() throws IloException{
+        for(int t = 1; t <= UCP.getnHours(); t++){
+        for(int g = 1; g <= UCP.getnGenerators(); g++){
+            
+            System.out.println("U_"+g+"_"+t+" = "+model.getValue(u[g-1][t-1]));
             }
         }
     }  

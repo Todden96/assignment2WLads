@@ -172,7 +172,7 @@ public class UnitCommitmentProblem {
     public double getDemand(int h) {
         //Returns the amount of power (in MW) needed at time h
         if(h < 1 || h > nGenerators){
-            throw new IllegalArgumentException("The hour number must be in [1,"+nGenerators+"].");
+            throw new IllegalArgumentException("The hour number must be in [1,"+nHours+"].");
         }
         return demand[h-1];
     }
