@@ -5,17 +5,13 @@
  */
 package assignement2;
 
-
 import ilog.concert.IloException;
 import ilog.concert.IloIntVar;
 import ilog.concert.IloLinearNumExpr;
 import ilog.concert.IloNumVar;
 import ilog.cplex.IloCplex;
 
-/**
- *
- * @author vtodd
- */
+
 public class UnitCommitmentModel {
     
     private final IloCplex model;
@@ -149,9 +145,8 @@ public class UnitCommitmentModel {
                         lhs.addTerm(-1, u[g-1][t-2]);
                     }
                 }
-                //I'm guessing this should be -constant.
-                //Discuss with group -Victor
-                model.addGe(lhs,constant);
+                //We have changed this to "-constant" as we move the constant to the RHS of the inequality.                
+                model.addGe(lhs,-constant);
             }
         }
         

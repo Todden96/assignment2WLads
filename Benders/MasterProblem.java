@@ -12,38 +12,38 @@ import ilog.concert.IloRange;
 import ilog.cplex.IloCplex;
 import assignement2.UnitCommitmentProblem;
 import ilog.concert.IloIntVar;
-import ilog.concert.IloObjective;
 
-/**
- *
- * @author vtodd
- */
-// We have chosen the u_gt's to be the complicating constraints.
-// If these are fixed we will either have a linear problem with an optimal solution or no feasible solution.
-public class MasterProblem {
+// We have chosen the u_gt's to be the complicating variables.
+// If these are fixed we will either have a linear problem (such as a well known Transportation Problem)
+// or several single-variable optimization problems, with an optimal solution or no feasible solution.
+public class MasterProblem{
     
     private final IloRange upTimeConstr[][];
     private final IloRange downTimeConstr[][];
-    // These two constraints ((1c) and (1d)) we bring to the masterproblem as they are somewhat dependent
-    // We need to ask Emma or G about why it makes so perfect sense to bring exactly these two to the MP
-    // Maybe it's because everywhere else u_gt is there is also another variable
-    // and therefore the cons goes to the SP - Victor
+    // These two constraints ((1c) and (1d)) we bring to the masterproblem as they are they are the only
+    // ones depending only on u.
+    // Note that we could also have included constraint 1b in the Master Problem, but it doesn't make a
+    // difference if we put it here or in the subproblems (as this is only there to active startup costs).
+    // This because it is the only constraint containing the variable c.
+    
     private final IloCplex model;
     private final IloIntVar u[][];
-    // Our only decesion variable in the MP (plus phi)
+    // Our only decision variable in the MP (plus phi)
     private final IloNumVar phi;
     
+    //We need an instance of the UnitCommitmentProblem
     private final UnitCommitmentProblem UCP;
     
-     public MasterProblem(UnitCommitmentProblem ucp) throws IloException {
+    public MasterProblem(UnitCommitmentProblem ucp) throws IloException {
         this.UCP = ucp;
         
-        // 1. Every model needs an IloCplex object
+        
         this.model = new IloCplex();
         
-        // 2. Creates the decision variables
+        // Creates the decision variables
         // we have g generators and t hours, thus we create a matrix
         // of length nGenerators times nHours which will contain objects of type IloIntVar
+        // (we could also have used booleans here as the u's are binary variables)
         this.u = new IloIntVar[UCP.getnGenerators()][UCP.getnHours()];
         
         // Assigns to each position in the matrix an IloIntVar object which can take value 0 and 1.
@@ -58,22 +58,27 @@ public class MasterProblem {
         // as all the decision variables and all parameters of our original problem are non-negative.
         this.phi = model.numVar(0, Double.POSITIVE_INFINITY,"phi");
         
-        // 3. Creates the objective function
-        // Creates an empty linear numerical expression 
+        // Here we create the objective function
         IloLinearNumExpr obj = model.linearNumExpr();
         
-        // Adds terms to the equation
-        for(int i = 1; i <= UCP.getnGenerators(); i++){
-            for(int j = 1; j <=UCP.getnHours(); j++){
-            obj.addTerm(UCP.getCommitmentCost(i), u[i-1][j-1]);
+        // We add terms to the equation
+        for(int g = 1; g <= UCP.getnGenerators(); g++){
+            for(int t = 1; t <=UCP.getnHours(); t++){
+                //We add the complicating variable times its coefficient for each g and t
+                obj.addTerm(UCP.getCommitmentCost(g), u[g-1][t-1]);
             }
         }
+        // We also add phi to compensate for the rest of the decision variables
         obj.addTerm(1, phi);
         
         // Tells cplex to minimize the objective function
         model.addMinimize(obj);
         
-        // We now add (1c) to the MP. Note we have g times t constraints.
+        
+        // Now we add constraints to the MP:
+        
+        // We add (1c) to the MP. Note we have g times t constraints. We save them all to keep track of
+        // them later when we solve the dual problem
         upTimeConstr = new IloRange[UCP.getnGenerators()][UCP.getnHours()];
         for(int g = 1; g <= UCP.getnGenerators(); g++){
             for(int t = 1; t <= UCP.getnHours(); t++){
@@ -82,6 +87,7 @@ public class MasterProblem {
                 for(int tt = t; tt <= UCP.getMinOnTimeAtT(g, t); tt++){
                     lhs.addTerm(1, u[g-1][tt-1]);
                     lhs.addTerm(-1, u[g-1][t-1]);
+                    //we neglect u_{g,0} as we assume that it is 0. We add u_{g,t-2} for t>1.
                     if(t > 1){
                         lhs.addTerm(1, u[g-1][t-2]);
                     }
@@ -96,176 +102,157 @@ public class MasterProblem {
             for(int t = 1; t <= UCP.getnHours(); t++){
                 IloLinearNumExpr lhs = model.linearNumExpr();
                 // We loop over t'
-                // We add one every time we loop. We save this sum in a constant
+                // We add one every time we loop over t'. We save this sum in a constant
+                // Note that we reset the constant to 0 every time we loop over t and avoid a large
+                // constant for a large t.
                 int constant = 0;
                 for(int tt = t; tt <= UCP.getMinOffTimeAtT(g, t); tt++){
                     constant++;
                     lhs.addTerm(-1, u[g-1][tt-1]);
                     lhs.addTerm(1, u[g-1][t-1]);
+                    // Same as 1c
                     if(t > 1){
                         lhs.addTerm(-1, u[g-1][t-2]);
                     }
                 }
-                // We make this right hand side as we cannot add a series of 1's in our lhs.addTerm
-                // Note, lads, that I have changed this as in the UnitCommitmentModel.
-                // Still think it should be -constant tho -Victor
-                downTimeConstr[g-1][t-1] = model.addGe(lhs,constant);
+                // In each expression we move the constant term to the right-hand-side and therefore get
+                // a minus.
+                downTimeConstr[g-1][t-1] = model.addGe(lhs,-constant);
             }
         }
-        
-        
     }
+    
+// We want to solve the MP
     public void solve() throws IloException{
-        // Setting the output to null we suppress logs
-        // regarding the (dual) simplex iterations
+        // We solve the model using the below defined Callback
         model.use(new Callback());
         
         // Solves the problem
         model.solve();
     }
+    
+    
+    // Create the Callback
     private class Callback extends IloCplex.LazyConstraintCallback{
         
         public Callback() {
         }
         
+        // Here we define what should be done every time we reach a new integer node in the B&B tree. 
         @Override
         protected void main() throws IloException {
+            // We obtain the solution of our variables in the current node
             double[][] U = getU();
             double Phi = getPhi();
         
-                //We create an instance of the feasibility subproblem
-        FeasSubProblem fsp = new FeasSubProblem(UCP,U);
+            //We create an instance of the feasibility subproblem and solve it
+            FeasSubProblem fsp = new FeasSubProblem(UCP,U);
             fsp.solve();
-                //We store the result of the feasibility subproblem
+            //We store the result of the objective function of the feasibility subproblem
             double fspObjective = fsp.getObjective();
-        
-        
-        System.out.println("FSP "+fspObjective);
-            //We check if the feasibility problem is positive. If so we make a feasibility cut.
-        if(fspObjective >= 0+1e-10){
+            System.out.println("FSP = "+fspObjective);
+ 
+            //We check if the objective function value of the feasibility problem is positive.
+            //If so we make a feasibility cut.
+        if(fspObjective >= 0+1e-6){
             System.out.println("Generating feasibility cut!");
-            //Here we store the dual variables of the feasibility subproblem
+            // We make the feasibility cut by getting the constant and linear term from the subproblem
             double constant = fsp.generateFeasCutConstant();
             IloLinearNumExpr linearTerm = fsp.getCutLinearTerm(u);
             //Here we add the feasibility cut to our Master Problem
-            add(model.le(linearTerm,-constant));
+            IloRange cut = model.le(linearTerm, -constant);
+            add(cut);
             
             //If the feasibility subproblem is zero we move on to solve the optimality subproblem
-        }else{
-            
-            //We now create an instance of the optimality subproblem.
+        }
+        else{
+            //We now create an instance of the optimality subproblem and solves it
             OptSubProblem osp = new OptSubProblem(UCP,U);
-                osp.solve();
-                //Here we store the objective value of optimality subproblem
-                double ospObjective = osp.getObjective();
+            osp.solve();
+            
+            //Here we store the objective value of the optimality subproblem
+            double ospObjective = osp.getObjective();
+            
+            //We print the values of Phi and the objective value
+            System.out.println("Phi = "+Phi+ " and "+ " OSP "+ospObjective );
+            
+            //If the below inequality holds, we have found the optimal solution to the current node.
+            if(Phi >= ospObjective - 1e-9){
+                System.out.println("The current node is optimal");
                 
+                // We also print the generators that are turned on/off during the hours
+                System.out.println("These generators are turned on during these hours:");
+                for(int g = 1; g <= UCP.getnGenerators(); g++){
+                    System.out.print(UCP.getGeneratorName(g));
+                    for(int t =1; t <= UCP.getnHours(); t++){
+                        System.out.print(String.format(" %4.0f ", U[g-1][t-1]));
+                    }
+                System.out.println("");
+                }
+                // We print the amount of energy each generator produces in each hour
+                System.out.println("Our generators produce this amount of energy during these hours:");
+                for(int g = 1; g <= UCP.getnGenerators(); g++){
+                    System.out.print(UCP.getGeneratorName(g));
+                    for(int t =1; t <= UCP.getnHours(); t++){
+                        System.out.print(String.format(" %4.0f ", osp.getPSolution()[g-1][t-1]));
+                    }
+                System.out.println("");
+                }
                 
-            System.out.println("Phi "+Phi+ " OSP "+ospObjective );
-                if(Phi >= ospObjective - 1e-6){
-                    
-                    //If the above inequality holds, we have found the optimal solution to the current node.
-                    System.out.println("The current node is optimal");
-                //double[][] PSol = osp.getPSolution();
-                //double[] LSol = osp.getLSolution();
+                //If the inequality does not hold we create an optimality cut.
                 }else{
                     
-                    //If the inequality does not hold we create an optimality cut.
-                   
                     System.out.println("Generating optimality cut");
                     // We get the constant and the linear term from
-                    // the optimality suproblem 
+                    // the optimality subproblem 
                     double cutConstant = osp.generateObtCutConstant();
                     IloLinearNumExpr cutTerm = osp.getCutLinearTerm(u);
+                    //We isolate the constant bringing phi to the other side of the inequality
                     cutTerm.addTerm(-1, phi);
                     // and generate and add a cut. 
-                    add(model.ge(-cutConstant, cutTerm));
+                    IloRange cut = model.le(cutTerm,-cutConstant);
+                    add(cut);
                     
                 }
         }
     }
         
-                // getU stores the solution of the u_gts of our master problem
+    // getU stores the solution of the u_gts of our master problem at the current integer node
     public double[][] getU() throws IloException{
-        double U[][] = new double[UCP.getnGenerators()][UCP.getnHours()];
-        for(int g = 1; g<= UCP.getnGenerators() ;g++){
-            for(int t = 1; t <= UCP.getnHours() ; t++){
-                U[g-1][t-1] = getValue(u[g-1][t-1]);
-            }
+    double U[][] = new double[UCP.getnGenerators()][UCP.getnHours()];
+    for(int g = 1; g<= UCP.getnGenerators() ;g++){
+        for(int t = 1; t <= UCP.getnHours() ; t++){
+            U[g-1][t-1] = getValue(u[g-1][t-1]);
         }
-        return U;
     }
-                // getPhi stores the solution of phi of our master problem
+    return U;
+    }
+
+    // getPhi stores the solution of phi of our master problem at the current integer node
     public double getPhi() throws IloException{
         return getValue(phi);
-        }
-    
     }
-    
-            //This will give us the objective value of our master problem.
-            //Our master problem includes phi. This is not a problem as we want to minimize phi in our MP
-            //so the value of phi will correspond to our value of our optimality subproblem.
-            //Therefore the solution will correspond to the optimal value of the original problem.
-    public double getObjective() throws IloException{
-        return model.getObjValue();
     }
+//This will give us the objective value of our master problem.
+//Our master problem includes phi. This is not a problem as we want to minimize phi in our MP
+//so the value of phi will correspond to our value of our optimality subproblem.
+//Therefore the solution will correspond to the optimal value of the original problem.
+public double getObjective() throws IloException{
+    return model.getObjValue();
+}
     
-        //This gives the price of having all the generators running during the day.
-    public double getFirstStageCost() throws IloException{
-        double cost = 0;
-        for(int i = 1; i <= UCP.getnGenerators(); i++){
-            for(int j = 1; j <= UCP.getnHours(); j++){
-            cost += UCP.getCommitmentCost(i)* model.getValue(u[i-1][j-1]);
-            }
-        }    
-        return cost;
-    }
-    
-    
-    /*public void printSolution() throws IloException{
-        System.out.println("Commitment");
-        for(int g = 1; g <= UCP.getnGenerators(); g++){
-            System.out.print(UCP.getGeneratorName(g));
-            for(int t =1; t <= UCP.getnHours(); t++){
-                System.out.print(String.format(" %4.0f ", model.getValue(u[g-1][t-1])));
+     
+//We also print the solution of the u's:
+public void printSolution() throws IloException{
+    System.out.println("These generators are turned on during these hours:");
+    for(int g = 1; g <= UCP.getnGenerators(); g++){
+        System.out.print(UCP.getGeneratorName(g));
+        for(int t =1; t <= UCP.getnHours(); t++){
+            System.out.print(String.format(" %4.0f ", model.getValue(u[g-1][t-1])));
             }
             System.out.println("");
         }
         
-         For every generator we can see the start up costs whenever they start up and zero otherwise
-        System.out.println("Startup costs");
-        for(int g = 1; g <= UCP.getnGenerators(); g++){
-            System.out.print(UCP.getGeneratorName(g));
-            for(int t =1; t <= UCP.getnHours(); t++){
-                System.out.print(String.format(" %4.2f ", model.getValue(c[g-1][t-1])));
-            }
-            System.out.println("");
-        }
-        
-        // For every generator g we can see how much they produce at all time t
-        System.out.println("Production");
-        for(int g = 1; g <= UCP.getnGenerators(); g++){
-            System.out.print(UCP.getGeneratorName(g));
-            for(int t =1; t <= UCP.getnHours(); t++){
-                System.out.print(String.format(" %4.2f ", model.getValue(p[g-1][t-1])));
-            }
-            System.out.println("");
-        }
-        
+
     }
-    */
-    
-    public void printSolution() throws IloException{
-        for(int t = 1; t <= UCP.getnHours(); t++){
-        for(int g = 1; g <= UCP.getnGenerators(); g++){
-            
-            System.out.println("U_"+g+"_"+t+" = "+model.getValue(u[g-1][t-1]));
-            }
-        }
-    }  
-    
-    
-    public void end(){
-        model.end();
-    }
-    
 }

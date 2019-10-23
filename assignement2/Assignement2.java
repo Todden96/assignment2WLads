@@ -17,9 +17,10 @@ import java.util.Locale;
  * @author vtodd
  */
 public class Assignement2 {
-
-    /**
+/**
      * @param args the command line arguments
+     * @throws java.io.FileNotFoundException
+     * @throws ilog.concert.IloException
      */
     public static void main(String[] args) throws FileNotFoundException, IloException{
    
@@ -53,28 +54,18 @@ public class Assignement2 {
         int[] minDownTime = new int[nGenerators];
         double[] productionCost = new double[nGenerators];
         
-        for(int i = 1; i <= nGenerators; i++){
-            names[i-1] = scanner.next();
-            
-            minProduction[i-1] = scanner.nextDouble();
-            
-            maxProduction[i-1] = scanner.nextDouble();
-            
-            startUpCosts[i-1] = scanner.nextDouble();
-            
-            commitmentCosts[i-1] = scanner.nextDouble();
-            
-            rampUp[i-1] = scanner.nextDouble();
-            
+        for(int g = 1; g <= nGenerators; g++){
+            names[g-1] = scanner.next();
+            minProduction[g-1] = scanner.nextDouble();
+            maxProduction[g-1] = scanner.nextDouble();
+            startUpCosts[g-1] = scanner.nextDouble();
+            commitmentCosts[g-1] = scanner.nextDouble();
+            rampUp[g-1] = scanner.nextDouble();
             // RampDown is equal to RampUp
-            rampDown[i-1] = rampUp[i-1];
-            minUpTime[i-1] = scanner.nextInt();
-            
-            minDownTime[i-1] = scanner.nextInt();
-            
-            productionCost[i-1] = scanner.nextDouble();
-            
-
+            rampDown[g-1] = rampUp[g-1];
+            minUpTime[g-1] = scanner.nextInt();
+            minDownTime[g-1] = scanner.nextInt();
+            productionCost[g-1] = scanner.nextDouble();
         }
         
         
@@ -87,12 +78,12 @@ public class Assignement2 {
         File loadsFile = new File("loads.txt");
         Scanner scanner2 = new Scanner(loadsFile);
         
+        // We skip the first line as this is only a description
         scanner2.nextLine();
         for(int i = 1; i <= nHours; i++){
+            //Fill in the demands for each hour
             demand[i-1] = scanner2.nextDouble();
         }
-        
-        
         
         // We calculate min up time and down time for each t
         int[][] minUpTimeAtT = new int[nGenerators][nHours];
@@ -104,24 +95,24 @@ public class Assignement2 {
             }
         }
         
+        //Here we define the shedding costs for every hour of the day
         double[] sheddingCosts = new double[nHours];
-        
+        double constant = 0;
         for(int t = 1; t <=nHours; t++){
-            sheddingCosts[t-1] = 29.58*2;
-                    //Math.max(productionCost(),0); TBC
+            for(int g = 1; g <= nGenerators; g++){
+                //We find the maximum of all the production costs of the generators.
+            if(constant <= productionCost[g-1]){
+                //if the constant is less than one of the previous production costs then we make the 
+                //constant equal this production cost
+                constant = productionCost[g-1];
+                        }
+            }
+            //The constant will therefore attain the highest production cost of all the generators.
+            //Here we assign the shedding costs as they were given in the assignment.
+            sheddingCosts[t-1] = constant*2;
         }
-        // ***************
-        // TO BE COMPLETED:
-        // Calculate the highest production cost, and set the shedding cost
-        // twice as high as the highest production cost
-        // .......
-        // .......
-        // *********************
-        
-        
         
         // 3. CREATES AN INSTANCE OF THE UNIT COMMITMENT PROBLEM
-        
         UnitCommitmentProblem ucp 
                 = new UnitCommitmentProblem(nHours,nGenerators,
                         names,commitmentCosts,productionCost,
@@ -141,22 +132,11 @@ public class Assignement2 {
         
         // 5. SOLVES THE PROBLEM USING BENDERS DECOMPOSITION
         // ***************
+        //We solve the problem using the Master Problem.
         MasterProblem mp = new MasterProblem(ucp);
         mp.solve();
         System.out.println("Best value with integer Benders = "+mp.getObjective());
-        //mp.printSolution();
-        
-        
-        // TO BE COMPLETED:
-        // In order to complete this code you might need to create the classes
-        // MasterProblem, OptimalitySubProblem, and FeasibilitySubProblem
-        // .......
-        // .......
-        // *********************
-        
-        
-        
-    
+        mp.printSolution();
     }
     
 }
